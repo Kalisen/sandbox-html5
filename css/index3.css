@@ -1,0 +1,17 @@
+#infoBox
+{
+    position: absolute;
+    z-index:1;
+}
+
+body {
+    font-family: Monospace;
+    background-color: #F5F5F5;
+    margin: 0;
+    overflow: hidden;
+}
+
+#container {
+    height: 492px;
+    width: 876px;
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+        body {
+            font-family: Monospace;
+            background-color: #F5F5F5;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #container {
+            height: 492px;
+            width: 876px;
+        }
+    </style>
+    <script src="js/vendor/jquery-1.8.3.min.js"></script>
+    <script src="js/vendor/three.js"></script>
+    <script src="js/vendor/Detector.js"></script>
+    <script src="js/vendor/Coordinates.js"></script>
+    <script src="js/vendor/OrbitAndPanControls.js"></script>
+    <script src="js/vendor/TrackballControls.js"></script>
+    <script src="js/vendor/uclass_TeapotGeometry.js"></script>
+    <script src="js/vendor/uclass_TeacupGeometry.js"></script>
+    <script src="js/vendor/uclass_TeaspoonGeometry.js"></script>
+    <script src="js/vendor/uclass_BeveledBlockGeometry.js"></script>
+    <script src="js/vendor/uclass_shaders.js"></script>
+    <script src="js/vendor/stats.min.js"></script>
+    <script src="js/vendor/dat.gui.min.js"></script>
+    <script src="js/vendor/tween.min.js"></script>
+    <script src="js/vendor/sprintf.js"></script>
+    <script src="fonts/helvetiker_bold.typeface.js"></script>
+</head>
+<body>
+    <div id="container">
+    </div>
+
+    <script src="js/scene_rendering_56.js"></script>
+    <script src="js/movie_room.js"></script>
+    <script>SCENE_RENDERING.create(INDEX_SCENE, INDEX_SCENE);</script>
+</body>
+</html>
