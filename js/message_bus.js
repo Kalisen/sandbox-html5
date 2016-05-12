@@ -44,73 +44,63 @@ SBX_HTML5.Stream.prototype = {
     }
 };
 
-SBX_HTML5.Service = function (serviceName, x, y, z, material, textMaterialArray) {
+SBX_HTML5.Service = function (serviceName, position, material, textMaterialArray) {
     this.serviceName = serviceName || "Service";
     this.material = material || new THREE.MeshPhongMaterial({color: "#0000FF", shininess: 80, specular: "#FFFFFF"});
     var geometry = new THREE.BoxGeometry(50, 50, 50);
     this.mesh = new THREE.Mesh(geometry, material);
-    this.mesh.position.set(x || 0, y || 0, z || 0);
-    this.textMaterialArray = new THREE.MeshFaceMaterial(textMaterialArray);
-
-    function drawText(text, position, textMaterialArray) {
-        var textGeom = new THREE.TextGeometry(text,
-            {
-                size: 30, height: 4, curveSegments: 3,
-                font: "helvetiker", weight: "bold", style: "normal",
-                bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
-                material: 0, extrudeMaterial: 1
-            });
-
-        var textMesh = new THREE.Mesh(textGeom, textMaterial);
-
-        // Center text
-        textGeom.computeBoundingBox();
-        var textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
-        var textHeight = textGeom.boundingBox.max.y - textGeom.boundingBox.min.y;
-        textMesh.position.set(
-            -0.5 * textWidth + position[0],
-            -0.5 * textHeight + position[1],
-            position[2]
-        );
-
-        parent.add(textMesh);
+    if (position) {
+        this.mesh.position.copy(position);
+    } else {
+        this.mesh.position.set(0, 0, 0);
     }
+    if (textMaterialArray) {
+        this.textMaterial = new THREE.MeshFaceMaterial(textMaterialArray);
+    } else {
+        var textMaterialFront = new THREE.MeshBasicMaterial({color: 0xff0000});
+        var textMaterialSide = new THREE.MeshBasicMaterial({color: 0x000000});
+        this.textMaterial = new THREE.MeshFaceMaterial([textMaterialFront, textMaterialSide]);
+    }
+
 };
 
 SBX_HTML5.Service.prototype = {
     fillScene: function (scene) {
+        buildTextMesh(this.mesh, this.serviceName, this.mesh.position);
         scene.add(this.mesh);
-        drawText(this.serviceName);
+
+        // must load fonts <script src="fonts/helvetiker_bold.typeface.js"></script>
+        function buildTextMesh(parent, text, position) {
+            var textGeom = new THREE.TextGeometry(text,
+                {
+                    size: 10, height: 1, curveSegments: 3,
+                    font: "helvetiker", weight: "bold", style: "normal",
+                    bevelEnabled: false,
+                    material: 0, extrudeMaterial: 1
+                });
+
+            var textMesh = new THREE.Mesh(textGeom, this.textMaterial);
+
+            // Center text
+            textGeom.computeBoundingBox();
+            var textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
+            var textHeight = textGeom.boundingBox.max.y - textGeom.boundingBox.min.y;
+            console.log("textPosition: " + position.x + ", " + position.y + ", " + position.z);
+            parent.geometry.computeBoundingBox();
+            textMesh.position.set(
+                -0.5 * textWidth,
+                -0.5 * textHeight,
+                parent.geometry.boundingBox.max.z
+            );
+
+            parent.add(textMesh);
+        }
     },
 
     updateScene: function (camera, scene, renderer, delta) {
         // relax and drink a beer
-    },
-
-    // must load fonts <script src="fonts/helvetiker_bold.typeface.js"></script>
-    drawText: function (text, position) {
-        var textGeom = new THREE.TextGeometry(text,
-            {
-                size: 30, height: 4, curveSegments: 3,
-                font: "helvetiker", weight: "bold", style: "normal",
-                bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
-                material: 0, extrudeMaterial: 1
-            });
-
-        var textMesh = new THREE.Mesh(textGeom, textMaterial);
-
-        // Center text
-        textGeom.computeBoundingBox();
-        var textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
-        var textHeight = textGeom.boundingBox.max.y - textGeom.boundingBox.min.y;
-        textMesh.position.set(
-            -0.5 * textWidth + position[0],
-            -0.5 * textHeight + position[1],
-            position[2]
-        );
-
-        parent.add(textMesh);
     }
+
 };
 
 SBX_HTML5.Api = function () {
@@ -146,10 +136,6 @@ var INDEX_SCENE = (function () {
         scene.add(light);
         scene.add(new THREE.PointLightHelper(light, 5));
 
-        var textMaterialFront = new THREE.MeshBasicMaterial({color: 0xff0000});
-        var textMaterialSide = new THREE.MeshBasicMaterial({color: 0x000000});
-        var textMaterialArray = [textMaterialFront, textMaterialSide];
-
         glowMaterial = new THREE.ShaderMaterial({
             uniforms: {
                 uViewVector: {type: "v3", value: light.position}
@@ -163,16 +149,20 @@ var INDEX_SCENE = (function () {
             vertexColors: THREE.VertexColors // feeds into vec3 'color' shader variable
         });
         //var cubeMaterial = new THREE.MeshBasicMaterial({color: "#0000FF", wireframe: false, transparent: true});
-        var cubeMaterial = new THREE.MeshPhongMaterial({color: "#0000FF", shininess: 80, specular: "#FFFFFF"});
-
-        var producerGeo = new THREE.BoxGeometry(50, 50, 50);
-        producerMesh = new THREE.Mesh(producerGeo, cubeMaterial);
-        producerMesh.position.set(-100, 0, 0);
-        scene.add(producerMesh);
-        var producerGlowGeo = new THREE.BoxGeometry(52, 52, 52);
-        var producerGlowMesh = new THREE.Mesh(producerGlowGeo, cubeMaterial);
-        producerGlowMesh.position.set(-100, 0, 0);
-        scene.add(producerGlowMesh);
+        var nexus = new SBX_HTML5.Service("Nexus", new THREE.Vector3(0, 0, 0), cubeMaterial);
+        nexus.fillScene(scene);
+        var serviceB = new SBX_HTML5.Service("Service B", new THREE.Vector3(-100, 0, 0), cubeMaterial);
+        serviceB.fillScene(scene);
+        var serviceC = new SBX_HTML5.Service("Service C", new THREE.Vector3(100, 0, 0), cubeMaterial);
+        serviceC.fillScene(scene);
+        var serviceD = new SBX_HTML5.Service("Service D", new THREE.Vector3(0, 100, 0), cubeMaterial);
+        serviceD.fillScene(scene);
+        var serviceE = new SBX_HTML5.Service("Service E", new THREE.Vector3(0, -100, 0), cubeMaterial);
+        serviceE.fillScene(scene);
+        var serviceF = new SBX_HTML5.Service("Service F", new THREE.Vector3(0, 0, 100), cubeMaterial);
+        serviceF.fillScene(scene);
+        var serviceG = new SBX_HTML5.Service("Service G", new THREE.Vector3(0, 0, -100), cubeMaterial);
+        serviceG.fillScene(scene);
 
         var consumerGeo = new THREE.SphereGeometry(25, 50, 50);
         consumerMesh = new THREE.Mesh(consumerGeo, cubeMaterial);
@@ -183,12 +173,12 @@ var INDEX_SCENE = (function () {
         consumerGlowMesh.position.set(100, 0, 0);
         scene.add(consumerGlowMesh);
 
-        stream = new SBX_HTML5.Stream(new THREE.Vector3().copy(producerMesh.position),
-            new THREE.Vector3().copy(consumerMesh.position));
+        stream = new SBX_HTML5.Stream(new THREE.Vector3().copy(nexus.mesh.position),
+            new THREE.Vector3().copy(serviceB.mesh.position));
         stream.fillScene(scene);
 
-        stream2 = new SBX_HTML5.Stream(new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(500, 200, 300));
+        stream2 = new SBX_HTML5.Stream(new THREE.Vector3().copy(nexus.mesh.position),
+            new THREE.Vector3().copy(serviceC.mesh.position));
         stream2.fillScene(scene);
 
         //SCENE_RENDERING.drawAxes(scene);
@@ -198,6 +188,77 @@ var INDEX_SCENE = (function () {
         //scene.add(vertexNormalHelper);
 
     }
+
+    function addTopologyToScene(topology) {
+        var serviceMaterial = new THREE.MeshPhongMaterial({color: "#0000FF", shininess: 80, specular: "#FFFFFF"});
+
+        var serviceDefinitions = topology.services;
+        var serviceDefinition;
+        var service;
+        for (var i = 0; i < serviceDefinitions.length; i++) {
+            var serviceDefinition = serviceDefinitions[i];
+            var service = new SBX_HTML5.Service(
+                serviceDefinition.name,
+                new THREE.Vector3(serviceDefinition.x, serviceDefinition.y, serviceDefinition.z),
+                serviceMaterial
+            );
+            service.fillScene(scene);
+        }
+    }
+
+
+    function buildTopology() {
+        return {
+            topology: {
+                services: [
+                    {
+                        name: "Nexus",
+                        x: 0,
+                        y: 0,
+                        z: 0
+                    },
+                    {
+                        name: "Service A",
+                        x: -100,
+                        y: 0,
+                        z: 0
+                    },
+                    {
+                        name: "Service B",
+                        x: 100,
+                        y: 0,
+                        z: 0
+                    },
+                    {
+                        name: "Service C",
+                        x: 0,
+                        y: -100,
+                        z: 0
+                    },
+                    {
+                        name: "Service D",
+                        x: 0,
+                        y: 100,
+                        z: 0
+                    },
+                    {
+                        name: "Service E",
+                        x: 0,
+                        y: 0,
+                        z: -100
+                    },
+                    {
+                        name: "Service F",
+                        x: 0,
+                        y: 0,
+                        z: 100
+                    },
+
+                ]
+            }
+        }
+    }
+
 
     function update(camera, scene, renderer, delta) {
         time += delta;
