@@ -3,7 +3,6 @@
 <head>
     <style>
         body {
-            font-family: Monospace;
             background-color: #F5F5F5;
             margin: 0;
             overflow: hidden;
@@ -25,10 +24,26 @@
     <script src="js/vendor/tween.min.js"></script>
 </head>
 <body>
-    <div id="container">
-    </div>
-    <script src="js/scene_rendering_70.js"></script>
-    <script src="js/object_picking.js"></script>
-    <script>SCENE_RENDERING.create(INDEX_SCENE);</script>
+<div id="container">
+</div>
+<script type="text/x-glsl" id="vertexShader">
+
+void main() {
+    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+}
+
+
+</script>
+<script type="text/x-glsl" id="fragmentShader">
+
+void main() {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+}
+
+
+</script>
+<script src="js/scene_rendering_70.js"></script>
+<script src="js/rotating_ticket.js"></script>
+<script>SCENE_RENDERING.create(INDEX_SCENE, false, new THREE.Vector3(0, 0, 200));</script>
 </body>
 </html>
