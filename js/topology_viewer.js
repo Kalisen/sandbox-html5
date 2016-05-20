@@ -29,13 +29,33 @@ SBX_HTML5.Topology.prototype = {
     findServiceById: function (serviceId) {
         var service;
         var serviceIndex = 0;
-        while (!service) {
+        while (!service && serviceIndex < this.services.length) {
             if (this.services[serviceIndex].id == serviceId) {
                 service = this.services[serviceIndex];
             }
             serviceIndex++;
         }
         return service;
+    },
+
+    findApiById: function (apiId) {
+        var service;
+        var api;
+        var serviceIndex = 0;
+        var apiIndex = 0;
+        while (!api && serviceIndex < this.services.length) {
+            service = this.services[serviceIndex];
+            apiIndex = 0;
+            while (!api && apiIndex < service.apis.length) {
+                if (service.apis[apiIndex].id == apiId) {
+                    api = service.apis[apiIndex];
+                    console.log("Found api by id " + apiId + ": " + api);
+                }
+                apiIndex++;
+            }
+            serviceIndex++;
+        }
+        return api;
     }
 };
 
@@ -57,12 +77,17 @@ SBX_HTML5.Service = function (id, name, position, material, textMaterialArray) {
         var textMaterialSide = new THREE.MeshBasicMaterial({color: 0x000000});
         this.textMaterial = new THREE.MeshFaceMaterial([textMaterialFront, textMaterialSide]);
     }
+    this.apis = [];
 
 };
 
 SBX_HTML5.Service.prototype = {
     fillScene: function (scene) {
         buildTextMesh(this.mesh, this.name, this.mesh.position);
+        for (var i = 0; i < this.apis.length; i++) {
+            this.apis[i].fillScene(scene);
+        }
+
         scene.add(this.mesh);
 
         // must load fonts <script src="fonts/helvetiker_bold.typeface.js"></script>
@@ -81,7 +106,6 @@ SBX_HTML5.Service.prototype = {
             textGeom.computeBoundingBox();
             var textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
             var textHeight = textGeom.boundingBox.max.y - textGeom.boundingBox.min.y;
-            console.log("textPosition: " + position.x + ", " + position.y + ", " + position.z);
             parent.geometry.computeBoundingBox();
             textMesh.position.set(
                 -0.5 * textWidth,
@@ -94,6 +118,9 @@ SBX_HTML5.Service.prototype = {
     },
 
     updateScene: function (camera, scene, renderer, delta) {
+        for (var i = 0; i < this.apis.length; i++) {
+            this.apis[i].updateScene(camera, scene, renderer, delta);
+        }
         // relax and drink a beer
     }
 
@@ -108,9 +135,15 @@ SBX_HTML5.DataFlow = function (originPosition, targetPosition, textureImagePath,
     this.textureImagePath = textureImagePath || "img/glow.png";
     this.particleCount = particleCount || DEFAULT_PARTICLE_COUNT;
     this.movementVector = new THREE.Vector3().copy(this.targetPosition).add(new THREE.Vector3().copy(this.originPosition).negate());
+    console.log(this.movementVector);
     this.texture = THREE.ImageUtils.loadTexture(this.textureImagePath);
     this.streamMaterial = new THREE.PointCloudMaterial({
-        color: 0xFF00FF, size: 10, map: this.texture, blending: THREE.AdditiveBlending, transparent: true
+        color: 0xFFFFFF,
+        size: 10,
+        map: this.texture,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        alphaTest: 0.8
     });
     this.movements = [];
     var points = new THREE.Geometry();
@@ -120,7 +153,7 @@ SBX_HTML5.DataFlow = function (originPosition, targetPosition, textureImagePath,
         this.movements.push(new THREE.Vector3().copy(this.movementVector).normalize().multiplyScalar(Math.random()));
     }
     this.pointCloud = new THREE.PointCloud(points, this.streamMaterial);
-    this.pointCloud.dynamic = true;
+    this.pointCloud.sortParticles = true;
 };
 
 SBX_HTML5.DataFlow.prototype = {
@@ -134,7 +167,7 @@ SBX_HTML5.DataFlow.prototype = {
         var vertices = this.pointCloud.geometry.vertices;
         for (var v = 0; v < vertices.length; v++) {
             vertices[v].add(this.movements[v]);
-            if (vertices[v].length() > this.targetPosition.length()) {
+            if (vertices[v].length() - this.targetPosition.length() < 10) {
                 vertices[v].copy(this.originPosition);
             }
         }
@@ -142,18 +175,63 @@ SBX_HTML5.DataFlow.prototype = {
     }
 };
 
-SBX_HTML5.Api = function () {
-
+SBX_HTML5.Api = function (id, name, material, parentService, apiPosition) {
+    this.id = id;
+    this.name = name;
+    this.material = material;
+    this.parentService = parentService;
+    this.apiPosition = apiPosition;
+    this.sphereRadius = 2;
+    var geometry = new THREE.SphereGeometry(this.sphereRadius, 16, 16);
+    this.mesh = new THREE.Mesh(geometry, this.material);
 };
 
-SBX_HTML5.Api.prototype = {};
+SBX_HTML5.Api.TOP_POSITION = 0;
+SBX_HTML5.Api.BOTTOM_POSITION = 1;
+SBX_HTML5.Api.FRONT_POSITION = 2;
+SBX_HTML5.Api.BACK_POSITION = 3;
+SBX_HTML5.Api.LEFT_POSITION = 4;
+SBX_HTML5.Api.RIGHT_POSITION = 5;
+
+SBX_HTML5.Api.prototype = {
+    fillScene: function (scene) {
+        var parentMesh = this.parentService.mesh;
+        parentMesh.geometry.computeBoundingBox();
+        switch (this.apiPosition) {
+            case (SBX_HTML5.Api.TOP_POSITION):
+                this.mesh.position.set(parentMesh.position.x, parentMesh.geometry.boundingBox.max.y + this.sphereRadius, parentMesh.position.z);
+                break;
+            case (SBX_HTML5.Api.BOTTOM_POSITION):
+                this.mesh.position.set(parentMesh.position.x, parentMesh.geometry.boundingBox.min.y - this.sphereRadius, parentMesh.position.z);
+                break;
+            case (SBX_HTML5.Api.FRONT_POSITION):
+                this.mesh.position.set(parentMesh.position.x, parentMesh.position.y, parentMesh.geometry.boundingBox.max.z + this.sphereRadius);
+                break;
+            case (SBX_HTML5.Api.BACK_POSITION):
+                this.mesh.position.set(parentMesh.position.x, parentMesh.position.y, parentMesh.geometry.boundingBox.min.z - this.sphereRadius);
+                break;
+            case (SBX_HTML5.Api.LEFT_POSITION):
+                this.mesh.position.set(parentMesh.geometry.boundingBox.max.x + this.sphereRadius, parentMesh.position.y, parentMesh.position.z);
+                break;
+            case (SBX_HTML5.Api.RIGHT_POSITION):
+                this.mesh.position.set(parentMesh.geometry.boundingBox.min.x - this.sphereRadius, parentMesh.position.y, parentMesh.position.z);
+                break;
+            default:
+                console.log("default");
+                //this.mesh.position.set(100, 0, 0);
+                break;
+        }
+        scene.add(this.mesh);
+    },
+
+    updateScene: function (camera, scene, renderer, delta) {
+        // relax and get a beer
+    }
+};
 
 var INDEX_SCENE = (function () {
 
     var light;
-    //var consumerMesh;
-    //var consumerGlowMesh;
-    //var glowMaterial;
     var time = 0;
     var topology;
 
@@ -164,38 +242,15 @@ var INDEX_SCENE = (function () {
     function fill(scene) {
 
         // LIGHTS
-        //light = new THREE.AmbientLight(0xFFFFFF);
         light = new THREE.PointLight(0xFFFFFF, 0.8);
         light.position.set(200, 150, 150);
         scene.add(light);
         scene.add(new THREE.PointLightHelper(light, 5));
 
-        //glowMaterial = new THREE.ShaderMaterial({
-        //    uniforms: {
-        //        uViewVector: {type: "v3", value: light.position}
-        //    },
-        //    attributes: {},
-        //    vertexShader: document.getElementById('vertexShader').textContent,
-        //    fragmentShader: document.getElementById('fragmentShader').textContent,
-        //    transparent: true,
-        //    blending: THREE.AdditiveBlending,
-        //    side: THREE.BackSide,
-        //    vertexColors: THREE.VertexColors // feeds into vec3 'color' shader variable
-        //});
-
         var jsonTopology = buildJsonTopology();
         console.log(jsonTopology);
         topology = buildTopology(jsonTopology);
         topology.fillScene(scene);
-
-        //var consumerGeo = new THREE.SphereGeometry(25, 50, 50);
-        //consumerMesh = new THREE.Mesh(consumerGeo, cubeMaterial);
-        //consumerMesh.position.set(200, 0, 0);
-        //scene.add(consumerMesh);
-        //var consumerGlowGeo = new THREE.SphereGeometry(30, 50, 50);
-        //consumerGlowMesh = new THREE.Mesh(consumerGlowGeo, glowMaterial);
-        //consumerGlowMesh.position.set(200, 0, 0);
-        //scene.add(consumerGlowMesh);
 
         // Helpers
         //
@@ -208,28 +263,56 @@ var INDEX_SCENE = (function () {
     }
 
     function buildTopology(jsonTopology) {
-        var serviceMaterial = new THREE.MeshPhongMaterial({color: "#0000FF", shininess: 80, specular: "#FFFFFF"});
-
         var rawTopology = JSON.parse(jsonTopology);
         var topology = new SBX_HTML5.Topology();
+        var serviceMaterial = new THREE.MeshPhongMaterial({
+            color: "#0000FF",
+            wireframe: true,
+            shininess: 80,
+            specular: "#FFFFFF"
+        });
+        var apiMaterial = new THREE.MeshPhongMaterial({color: "#FF0000", shininess: 10, specular: "#FF0000"});
+
         var serviceDefinitions = rawTopology.topology.services;
+        var serviceDefinition;
+        var service;
+        var apiDefinitions;
+        var apiDefinition;
+        var api;
         for (var i = 0; i < serviceDefinitions.length; i++) {
-            var serviceDefinition = serviceDefinitions[i];
-            var service = new SBX_HTML5.Service(
+            serviceDefinition = serviceDefinitions[i];
+            service = new SBX_HTML5.Service(
                 serviceDefinition.id,
                 serviceDefinition.name,
                 new THREE.Vector3(serviceDefinition.x, serviceDefinition.y, serviceDefinition.z),
                 serviceMaterial
             );
+            apiDefinitions = serviceDefinition.apis;
+            if (apiDefinitions) {
+                for (var j = 0; j < apiDefinitions.length; j++) {
+                    apiDefinition = apiDefinitions[j];
+                    api = new SBX_HTML5.Api(
+                        apiDefinition.id,
+                        apiDefinition.name,
+                        apiMaterial,
+                        service,
+                        apiDefinition.position
+                    );
+                    service.apis.push(api);
+                }
+            }
             topology.services.push(service);
         }
+        console.log("services count: " + topology.services.length);
+
         var dataFlowDefinitions = rawTopology.topology.dataFlows;
         for (i = 0; i < dataFlowDefinitions.length; i++) {
             var dataFlowDefinition = dataFlowDefinitions[i];
             var originService = topology.findServiceById(dataFlowDefinition.originId);
             var originPosition = new THREE.Vector3().copy(originService.mesh.position);
-            var targetService = topology.findServiceById(dataFlowDefinition.targetId);
-            var targetPosition = new THREE.Vector3().copy(targetService.mesh.position);
+            var targetApi = topology.findApiById(dataFlowDefinition.targetId);
+            //console.log(targetApi.mesh.position);
+            var targetPosition = new THREE.Vector3().copy(targetApi.mesh.position);
             var dataFlow = new SBX_HTML5.DataFlow(originPosition, targetPosition, undefined, dataFlowDefinition.rate);
             topology.dataFlows.push(dataFlow);
         }
@@ -245,7 +328,39 @@ var INDEX_SCENE = (function () {
                         name: "Nexus",
                         x: 0,
                         y: 0,
-                        z: 0
+                        z: 0,
+                        apis: [
+                            {
+                                id: "api-1",
+                                name: "api 1",
+                                position: 0
+                            },
+                            {
+                                id: "api-2",
+                                name: "api 2",
+                                position: 1
+                            },
+                            {
+                                id: "api-3",
+                                name: "api 3",
+                                position: 2
+                            },
+                            {
+                                id: "api-4",
+                                name: "api 4",
+                                position: 3
+                            },
+                            {
+                                id: "api-5",
+                                name: "api 5",
+                                position: 4
+                            },
+                            {
+                                id: "api-6",
+                                name: "api 6",
+                                position: 5
+                            }
+                        ]
                     },
                     {
                         id: "s-2",
@@ -294,38 +409,38 @@ var INDEX_SCENE = (function () {
                 dataFlows: [
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-2",
+                        originId: "s-2",
+                        targetId: "api-1",
                         rate: 5
                     },
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-3",
+                        originId: "s-3",
+                        targetId: "api-1",
                         rate: 5
                     },
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-4",
+                        originId: "s-4",
+                        targetId: "api-1",
                         rate: 20
                     },
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-5",
+                        originId: "s-5",
+                        targetId: "api-1",
                         rate: 20
                     },
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-6",
+                        originId: "s-6",
+                        targetId: "api-1",
                         rate: 10
                     },
                     {
                         id: "df-1",
-                        originId: "s-1",
-                        targetId: "s-7",
+                        originId: "s-7",
+                        targetId: "api-1",
                         rate: 50
                     }
                 ]
