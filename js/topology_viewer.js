@@ -49,7 +49,8 @@ SBX_HTML5.Topology.prototype = {
             while (!api && apiIndex < service.apis.length) {
                 if (service.apis[apiIndex].id == apiId) {
                     api = service.apis[apiIndex];
-                    console.log("Found api by id " + apiId + ": " + api);
+                    //console.log("Found api by id " + apiId);
+                    //console.log(api);
                 }
                 apiIndex++;
             }
@@ -58,6 +59,33 @@ SBX_HTML5.Topology.prototype = {
         return api;
     }
 };
+
+SBX_HTML5.Menu = function (material) {
+    this.visible = false;
+    this.material = material;
+    this.geom = new THREE.BoxGeometry(100, 100, 10, 8, 8 ,8);
+    this.mesh = new THREE.Mesh(this.geom, this.material);
+};
+
+SBX_HTML5.Menu.prototype = {
+    constructor: SBX_HTML5.Menu,
+
+    show: function (object) {
+        this.visible = true;
+        this.mesh.position.copy(object.object.position);
+    },
+
+    fillScene: function (scene) {
+        scene.add(this.mesh);
+    },
+
+    updateScene: function (camera, scene, renderer, delta) {
+        if (this.visible != this.mesh.visible) {
+            this.mesh.visible = this.visible;
+        }
+    }
+};
+
 
 SBX_HTML5.Service = function (id, name, position, material, textMaterialArray) {
     this.id = id || THREE.Math.generateUUID();
@@ -78,10 +106,12 @@ SBX_HTML5.Service = function (id, name, position, material, textMaterialArray) {
         this.textMaterial = new THREE.MeshFaceMaterial([textMaterialFront, textMaterialSide]);
     }
     this.apis = [];
-
+    this.mesh.service = this;
 };
 
 SBX_HTML5.Service.prototype = {
+    constructor: SBX_HTML5.Service,
+
     fillScene: function (scene) {
         buildTextMesh(this.mesh, this.name, this.mesh.position);
         for (var i = 0; i < this.apis.length; i++) {
@@ -126,40 +156,43 @@ SBX_HTML5.Service.prototype = {
 
 };
 
-SBX_HTML5.DataFlow = function (originPosition, targetPosition, textureImagePath, particleCount) {
+SBX_HTML5.DataFlow = function (originService, targetApi, particleCount, textureImagePath) {
 
     const DEFAULT_PARTICLE_COUNT = 20;
 
-    this.originPosition = originPosition || new THREE.Vector3();
-    this.targetPosition = targetPosition || new THREE.Vector3();
+    this.originService = originService;
+    this.targetApi = targetApi;
     this.textureImagePath = textureImagePath || "img/glow.png";
     this.particleCount = particleCount || DEFAULT_PARTICLE_COUNT;
-    this.movementVector = new THREE.Vector3().copy(this.targetPosition).add(new THREE.Vector3().copy(this.originPosition).negate());
-    console.log(this.movementVector);
-    this.texture = THREE.ImageUtils.loadTexture(this.textureImagePath);
-    this.streamMaterial = new THREE.PointCloudMaterial({
-        color: 0xFFFFFF,
-        size: 10,
-        map: this.texture,
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        alphaTest: 0.8
-    });
-    this.movements = [];
-    var points = new THREE.Geometry();
-    var vertices = points.vertices;
-    for (var i = 0; i < this.particleCount; i++) {
-        vertices.push(new THREE.Vector3(this.originPosition.x, this.originPosition.y, this.originPosition.z));
-        this.movements.push(new THREE.Vector3().copy(this.movementVector).normalize().multiplyScalar(Math.random()));
-    }
-    this.pointCloud = new THREE.PointCloud(points, this.streamMaterial);
-    this.pointCloud.sortParticles = true;
 };
 
 SBX_HTML5.DataFlow.prototype = {
     constructor: SBX_HTML5.DataFlow,
 
     fillScene: function (scene) {
+        this.originPosition = new THREE.Vector3().copy(this.originService.mesh.position);
+        this.targetPosition = new THREE.Vector3().copy(this.targetApi.mesh.position);
+        this.movementVector = new THREE.Vector3().copy(this.targetPosition).add(new THREE.Vector3().copy(this.originPosition).negate());
+
+        this.texture = THREE.ImageUtils.loadTexture(this.textureImagePath);
+        this.streamMaterial = new THREE.PointsMaterial({
+            color: 0xFFFFFF,
+            size: 10,
+            map: this.texture,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            alphaTest: 0.8
+        });
+        this.movements = [];
+        var points = new THREE.Geometry();
+        var vertices = points.vertices;
+        for (var i = 0; i < this.particleCount; i++) {
+            vertices.push(new THREE.Vector3(this.originPosition.x, this.originPosition.y, this.originPosition.z));
+            this.movements.push(new THREE.Vector3().copy(this.movementVector).normalize().multiplyScalar(Math.random()));
+        }
+        this.pointCloud = new THREE.Points(points, this.streamMaterial);
+        this.pointCloud.sortParticles = true;
+
         scene.add(this.pointCloud);
     },
 
@@ -167,7 +200,7 @@ SBX_HTML5.DataFlow.prototype = {
         var vertices = this.pointCloud.geometry.vertices;
         for (var v = 0; v < vertices.length; v++) {
             vertices[v].add(this.movements[v]);
-            if (vertices[v].length() - this.targetPosition.length() < 10) {
+            if (vertices[v].distanceToSquared(this.targetPosition) < 5) {
                 vertices[v].copy(this.originPosition);
             }
         }
@@ -182,8 +215,6 @@ SBX_HTML5.Api = function (id, name, material, parentService, apiPosition) {
     this.parentService = parentService;
     this.apiPosition = apiPosition;
     this.sphereRadius = 2;
-    var geometry = new THREE.SphereGeometry(this.sphereRadius, 16, 16);
-    this.mesh = new THREE.Mesh(geometry, this.material);
 };
 
 SBX_HTML5.Api.TOP_POSITION = 0;
@@ -195,6 +226,8 @@ SBX_HTML5.Api.RIGHT_POSITION = 5;
 
 SBX_HTML5.Api.prototype = {
     fillScene: function (scene) {
+        var geometry = new THREE.SphereGeometry(this.sphereRadius, 16, 16);
+        this.mesh = new THREE.Mesh(geometry, this.material);
         var parentMesh = this.parentService.mesh;
         parentMesh.geometry.computeBoundingBox();
         switch (this.apiPosition) {
@@ -229,11 +262,50 @@ SBX_HTML5.Api.prototype = {
     }
 };
 
+SBX_HTML5.Picker = function (containerName, menu) {
+
+    this.container = document.getElementById(containerName);
+    this.mouseVector = new THREE.Vector3(0, 0, 11);
+    this.rayCaster = new THREE.Raycaster();
+    this.menu = menu;
+
+    container.addEventListener('mousemove', this.onMouseMove(this.mouseVector), false);
+};
+
+SBX_HTML5.Picker.prototype = {
+
+    onMouseMove: function (mouseVector, e) {
+        return function (e) {
+            //console.log("x=" + e.clientX + ", y=" + e.clientY + ", width=" + canvas.width + ", height=" + canvas.height);
+            var canvas = container.getElementsByTagName('canvas')[0];
+            mouseVector.x = 2 * (e.clientX / canvas.clientWidth) - 1; // must use canvas.clientWidth and canvas.clientHeight to account for pixelRatio
+            mouseVector.y = 1 - 2 * (e.clientY / canvas.clientHeight);
+            //console.log("x=" + mouseVector.x + ", y=" + mouseVector.y);
+        }
+    },
+
+    updateScene: function (camera, scene, renderer, delta) {
+        this.rayCaster.setFromCamera(this.mouseVector.normalize(), camera);
+        var sceneObjects = scene.children;
+        var intersects = this.rayCaster.intersectObjects(sceneObjects, false);
+        if (intersects) {
+            for (i = 0; i < intersects.length; i++) {
+                if (intersects[i].object.service) {
+                    console.log(intersects[i]);
+                    this.menu.show(intersects[i]);
+                }
+            }
+        }
+    }
+};
+
 var INDEX_SCENE = (function () {
 
     var light;
     var time = 0;
     var topology;
+    var picker;
+    var menu;
 
     function init() {
         // init
@@ -248,9 +320,19 @@ var INDEX_SCENE = (function () {
         scene.add(new THREE.PointLightHelper(light, 5));
 
         var jsonTopology = buildJsonTopology();
-        console.log(jsonTopology);
+        //console.log(jsonTopology);
         topology = buildTopology(jsonTopology);
         topology.fillScene(scene);
+
+        var menuMaterial = new THREE.MeshPhongMaterial({
+            color: "#00FF33",
+            specular: "#FFFFFF"
+        });
+        menu = new SBX_HTML5.Menu(menuMaterial);
+        menu.fillScene(scene);
+
+        picker = new SBX_HTML5.Picker("container", menu);
+
 
         // Helpers
         //
@@ -271,7 +353,7 @@ var INDEX_SCENE = (function () {
             shininess: 80,
             specular: "#FFFFFF"
         });
-        var apiMaterial = new THREE.MeshPhongMaterial({color: "#FF0000", shininess: 10, specular: "#FF0000"});
+        var apiMaterial = new THREE.MeshPhongMaterial({color: "#FF0000", specular: "#FF0000"});
 
         var serviceDefinitions = rawTopology.topology.services;
         var serviceDefinition;
@@ -309,11 +391,8 @@ var INDEX_SCENE = (function () {
         for (i = 0; i < dataFlowDefinitions.length; i++) {
             var dataFlowDefinition = dataFlowDefinitions[i];
             var originService = topology.findServiceById(dataFlowDefinition.originId);
-            var originPosition = new THREE.Vector3().copy(originService.mesh.position);
             var targetApi = topology.findApiById(dataFlowDefinition.targetId);
-            //console.log(targetApi.mesh.position);
-            var targetPosition = new THREE.Vector3().copy(targetApi.mesh.position);
-            var dataFlow = new SBX_HTML5.DataFlow(originPosition, targetPosition, undefined, dataFlowDefinition.rate);
+            var dataFlow = new SBX_HTML5.DataFlow(originService, targetApi, dataFlowDefinition.rate);
             topology.dataFlows.push(dataFlow);
         }
         return topology;
@@ -410,7 +489,7 @@ var INDEX_SCENE = (function () {
                     {
                         id: "df-1",
                         originId: "s-2",
-                        targetId: "api-1",
+                        targetId: "api-5",
                         rate: 5
                     },
                     {
@@ -458,6 +537,8 @@ var INDEX_SCENE = (function () {
         //glowMaterial.needsUpdate = true;
 
         topology.updateScene(camera, scene, renderer, delta);
+        picker.updateScene(camera, scene, renderer, delta);
+
     }
 
 
